@@ -14,6 +14,14 @@ func strToColourNoErr(hexStr string) Colour {
 	return c
 }
 
+func ColoursEqual(clr1 *Colour, clr2 *Colour) bool {
+	if clr1 == nil && clr2 == nil {
+		return true
+	}
+
+	return clr1 != nil && clr2 != nil && clr1[0] == clr2[0] && clr1[1] == clr2[1] && clr1[2] == clr2[2]
+}
+
 func strToColour(hexStr string) (Colour, error) {
 
 	c := [3]float32{0, 0, 0}

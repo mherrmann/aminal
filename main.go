@@ -60,6 +60,7 @@ func initialize(fn callback) {
 	if err != nil {
 		logger.Fatalf("Cannot start: %s", err)
 	}
+	defer g.Free()
 
 	if fn != nil {
 		go fn(terminal, g)

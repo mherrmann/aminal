@@ -1140,3 +1140,7 @@ func (buffer *Buffer) ReverseVideo() {
 		line.ReverseVideo()
 	}
 }
+
+func (buffer *Buffer) GetLines() []Line {
+	return buffer.lines
+}

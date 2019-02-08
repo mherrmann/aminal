@@ -56,6 +56,8 @@ type GUI struct {
 	leftClickCount    int  // number of clicks in a serie - single click, double click, or triple click
 	mouseMovedAfterSelectionStarted bool
 	internalResize    bool
+
+	miniMap           *miniMap
 }
 
 func Min(x, y int) int {
@@ -149,7 +151,15 @@ func New(config *config.Config, terminal *terminal.Terminal, logger *zap.Sugared
 		keyboardShortcuts: shortcuts,
 		resizeLock:        &sync.Mutex{},
 		internalResize:    false,
+		miniMap:           nil,
 	}, nil
+}
+
+func (gui *GUI) Free() {
+	if gui.miniMap != nil {
+		gui.miniMap.Free()
+		gui.miniMap = nil
+	}
 }
 
 // inspired by https://kylewbanks.com/blog/tutorial-opengl-with-golang-part-1-hello-opengl
@@ -254,6 +264,8 @@ func (gui *GUI) resize(w *glfw.Window, width int, height int) {
 
 	gui.terminal.SetCharSize(gui.renderer.cellWidth, gui.renderer.cellHeight)
 
+	gui.resizeMiniMap()
+
 	gui.logger.Debugf("Resize complete!")
 
 	gui.redraw()
@@ -338,6 +350,13 @@ func (gui *GUI) Render() error {
 		}
 		gui.Close()
 	}()
+
+	miniMap, err := newMiniMap()
+	if err != nil {
+		return err
+	}
+	gui.miniMap = miniMap
+	gui.miniMap.resize(gui)
 
 	gui.logger.Debugf("Starting render...")
 
@@ -530,6 +549,8 @@ func (gui *GUI) redraw() {
 		}
 
 	}
+
+	gui.renderMiniMap()
 	gui.renderOverlay()
 }
 
@@ -668,4 +689,16 @@ func (gui *GUI) Screenshot(path string) {
 	file, _ := os.Create(path)
 	defer file.Close()
 	png.Encode(file, img)
+}
+
+func (gui *GUI) renderMiniMap() {
+	if gui.miniMap != nil {
+		gui.miniMap.render(gui)
+	}
+}
+
+func (gui *GUI) resizeMiniMap() {
+	if gui.miniMap != nil {
+		gui.miniMap.resize(gui)
+	}
 }

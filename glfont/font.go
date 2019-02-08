@@ -98,6 +98,8 @@ func (f *Font) LinePadding() float32 {
 
 //Printf draws a string to the screen, takes a list of arguments like printf
 func (f *Font) Print(x, y float32, text string) error {
+	return f.PrintScaled(1.0, x, y, text)
+	/*
 
 	indices := []rune(text)
 
@@ -178,6 +180,7 @@ func (f *Font) Print(x, y float32, text string) error {
 	gl.Disable(gl.BLEND)
 
 	return nil
+	*/
 }
 
 //Width returns the width of a piece of text in pixels
@@ -314,4 +317,81 @@ func (f *Font) GetRune(r rune) (*character, error) {
 	f.characters[r] = char
 
 	return char, nil
+}
+
+func (f *Font) PrintScaled(scale float32, x, y float32, text string) error {
+	if len(text) == 0 {
+		return nil
+	}
+
+	indices := []rune(text)
+
+	//setup blending mode
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
+	// Activate corresponding render state
+	gl.UseProgram(f.program)
+	//set text color
+	gl.Uniform4f(gl.GetUniformLocation(f.program, gl.Str("textColor\x00")), f.color.r, f.color.g, f.color.b, f.color.a)
+	//set screen resolution
+	//resUniform := gl.GetUniformLocation(f.program, gl.Str("resolution\x00"))
+	//gl.Uniform2f(resUniform, float32(2560), float32(1440))
+
+	gl.ActiveTexture(gl.TEXTURE0)
+	gl.BindVertexArray(f.vao)
+
+	// Iterate through all characters in string
+	for _, runeIndex := range indices {
+		//find rune in fontChar list
+		ch, err := f.GetRune(runeIndex)
+		if err != nil {
+			return err // @todo ignore errors?
+		}
+
+		//calculate position and size for current rune
+		xpos := x + float32(ch.bearingH) * scale
+		ypos := y - float32(+ch.height-ch.bearingV) * scale
+		w := float32(ch.width) * scale
+		h := float32(ch.height) * scale
+
+		//set quad positions
+		var x1 = xpos
+		var x2 = xpos + w
+		var y1 = ypos
+		var y2 = ypos + h
+
+		//setup quad array
+		var vertices = []float32{
+			//  X, Y, Z, U, V
+			// Front
+			x1, y1, 0.0, 0.0,
+			x2, y1, 1.0, 0.0,
+			x1, y2, 0.0, 1.0,
+			x1, y2, 0.0, 1.0,
+			x2, y1, 1.0, 0.0,
+			x2, y2, 1.0, 1.0}
+
+		// Render glyph texture over quad
+		gl.BindTexture(gl.TEXTURE_2D, ch.textureID)
+		// Update content of VBO memory
+		gl.BindBuffer(gl.ARRAY_BUFFER, f.vbo)
+
+		gl.BufferSubData(gl.ARRAY_BUFFER, 0, len(vertices)*4, gl.Ptr(vertices)) // Be sure to use glBufferSubData and not glBufferData
+		// Render quad
+		gl.DrawArrays(gl.TRIANGLES, 0, 24)
+
+		gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+		// Now advance cursors for next glyph (note that advance is number of 1/64 pixels)
+		x += float32(ch.advance >> 6) * scale // Bitshift by 6 to get value in pixels (2^6 = 64 (divide amount of 1/64th pixels by 64 to get amount of pixels))
+
+	}
+
+	//clear OpenGL textures and programs
+	gl.BindVertexArray(0)
+	gl.BindTexture(gl.TEXTURE_2D, 0)
+	gl.UseProgram(0)
+	gl.Disable(gl.BLEND)
+
+	return nil
 }
