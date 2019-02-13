@@ -35,7 +35,63 @@ func (gui *GUI) getArrowCursor() *glfw.Cursor {
 	return gui.arrowCursor
 }
 
-func (gui *GUI) mouseMoveCallback(w *glfw.Window, px float64, py float64) {
+func (gui *GUI) scaleMouseCoordinates(px float64, py float64) (float64, float64) {
+	scale := float64(gui.scale())
+	px = px / scale
+	py = py / scale
+
+	return px, py
+}
+
+func (gui *GUI) globalMouseMoveCallback(w *glfw.Window, px float64, py float64) {
+	px, py = gui.scaleMouseCoordinates(px, py)
+
+	if gui.catchedMouseHandler != nil {
+		gui.catchedMouseHandler.mouseMoveCallback(gui, px, py)
+	} else {
+		if gui.isMouseInside(px, py) {
+			gui.mouseMoveCallback(gui, px, py)
+		} else if gui.vScrollbar != nil && gui.vScrollbar.isMouseInside(px, py) {
+			gui.vScrollbar.mouseMoveCallback(gui, px, py)
+		}
+	}
+}
+
+func (gui *GUI) globalMouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Action, mod glfw.ModifierKey) {
+	mouseX, mouseY := gui.scaleMouseCoordinates(w.GetCursorPos())
+
+	if gui.catchedMouseHandler != nil {
+		gui.catchedMouseHandler.mouseButtonCallback(gui, button, action, mod, mouseX, mouseY)
+		if action == glfw.Release && button == gui.mouseCatchedOnButton {
+			gui.catchMouse(nil, 0)
+		}
+	} else {
+
+		if gui.isMouseInside(mouseX, mouseY) {
+			if action == glfw.Press {
+				gui.catchMouse(gui, button)
+			}
+			gui.mouseButtonCallback(gui, button, action, mod, mouseX, mouseY)
+		} else if gui.vScrollbar != nil && gui.vScrollbar.isMouseInside(mouseX, mouseY) {
+			if action == glfw.Press {
+				gui.catchMouse(gui.vScrollbar, button)
+			}
+			gui.vScrollbar.mouseButtonCallback(gui, button, action, mod, mouseX, mouseY)
+		}
+	}
+}
+
+func (gui *GUI) catchMouse(newHandler mouseEventsHandler, button glfw.MouseButton) {
+	gui.catchedMouseHandler = newHandler
+	gui.mouseCatchedOnButton = button
+}
+
+func (gui *GUI) isMouseInside(px float64, py float64) bool {
+	return px >= float64(gui.renderer.areaX) && px < float64(gui.renderer.areaX+gui.renderer.areaWidth) &&
+		py >= float64(gui.renderer.areaY) && py < float64(gui.renderer.areaY+gui.renderer.areaHeight)
+}
+
+func (gui *GUI) mouseMoveCallback(g *GUI, px float64, py float64) {
 
 	x, y := gui.convertMouseCoordinates(px, py)
 
@@ -52,16 +108,13 @@ func (gui *GUI) mouseMoveCallback(w *glfw.Window, px float64, py float64) {
 	}
 
 	if url := gui.terminal.ActiveBuffer().GetURLAtPosition(x, y); url != "" {
-		w.SetCursor(gui.getHandCursor())
+		gui.window.SetCursor(gui.getHandCursor())
 	} else {
-		w.SetCursor(gui.getArrowCursor())
+		gui.window.SetCursor(gui.getArrowCursor())
 	}
 }
 
 func (gui *GUI) convertMouseCoordinates(px float64, py float64) (uint16, uint16) {
-	scale := gui.scale()
-	px = px / float64(scale)
-	py = py / float64(scale)
 	x := uint16(math.Floor((px - float64(gui.renderer.areaX)) / float64(gui.renderer.CellWidth())))
 	y := uint16(math.Floor((py - float64(gui.renderer.areaY)) / float64(gui.renderer.CellHeight())))
 
@@ -87,8 +140,7 @@ func (gui *GUI) updateLeftClickCount(x uint16, y uint16) int {
 	return gui.leftClickCount
 }
 
-func (gui *GUI) mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Action, mod glfw.ModifierKey) {
-
+func (gui *GUI) mouseButtonCallback(g *GUI, button glfw.MouseButton, action glfw.Action, mod glfw.ModifierKey, mouseX float64, mouseY float64) {
 	if gui.overlay != nil {
 		if button == glfw.MouseButtonRight && action == glfw.Release {
 			gui.setOverlay(nil)
@@ -97,7 +149,7 @@ func (gui *GUI) mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, act
 	}
 
 	// before we forward clicks on (below), we need to handle them locally for url clicking, text highlighting etc.
-	x, y := gui.convertMouseCoordinates(w.GetCursorPos())
+	x, y := gui.convertMouseCoordinates(mouseX, mouseY)
 	tx := int(x) + 1 // vt100 is 1 indexed
 	ty := int(y) + 1
 
